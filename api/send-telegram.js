@@ -1,5 +1,5 @@
 // Vercel API Route для отправки в Telegram
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // Разрешаем CORS для всех доменов
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
