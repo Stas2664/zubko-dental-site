@@ -1,81 +1,94 @@
-// Vercel API Route для отправки в Telegram
-module.exports = async function handler(req, res) {
-  // Разрешаем CORS для всех доменов
+const https = require('https');
+
+module.exports = (req, res) => {
+  // CORS заголовки
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // Обрабатываем OPTIONS запрос (preflight)
+  // Обработка preflight запроса
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    res.status(200).end();
+    return;
   }
 
-  // Принимаем только POST запросы
+  // Только POST запросы
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
+    res.status(405).json({ error: 'Method Not Allowed' });
+    return;
   }
 
-  try {
-    const data = req.body;
+  // Получаем данные
+  const { name, age, phone, complaints } = req.body;
+
+  // Проверяем обязательные поля
+  if (!name || !phone) {
+    res.status(400).json({ error: 'Отсутствуют обязательные поля' });
+    return;
+  }
+
+  // Формируем сообщение
+  const message = `🦷 Новая заявка с сайта
+
+👤 Имя: ${name}
+🎂 Возраст: ${age} лет
+📞 Телефон: ${phone}
+🩺 Жалобы: ${complaints}
+
+⏰ Время: ${new Date().toLocaleString('ru-RU')}`;
+
+  // Настройки Telegram
+  const botToken = '7535946322:AAGpiSvEsyBWama9QC-ydaRAF7Y94yutoc8';
+  const chatId = '-1002827782723';
+  
+  // Данные для отправки
+  const postData = JSON.stringify({
+    chat_id: chatId,
+    text: message
+  });
+
+  // Настройки запроса
+  const options = {
+    hostname: 'api.telegram.org',
+    port: 443,
+    path: `/bot${botToken}/sendMessage`,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': postData.length
+    }
+  };
+
+  // Отправляем запрос
+  const request = https.request(options, (response) => {
+    let data = '';
     
-    if (!data || !data.name || !data.phone) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    // Chat ID твоей группы "Сайт Стоматолог"
-    const botToken = '7535946322:AAGpiSvEsyBWama9QC-ydaRAF7Y94yutoc8';
-    const chatId = '-1002827782723';
-
-    // Формируем сообщение
-    const message = `🦷 *Новая заявка с сайта*
-
-👤 *Имя:* ${data.name}
-🎂 *Возраст:* ${data.age} лет
-📞 *Телефон:* ${data.phone}
-🩺 *Жалобы:* ${data.complaints}
-
-⏰ *Время:* ${new Date().toLocaleString('ru-RU', {
-      timeZone: 'Europe/Moscow',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })}`;
-
-    // Отправляем в Telegram
-    const telegramResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: message,
-        parse_mode: 'Markdown'
-      })
+    response.on('data', (chunk) => {
+      data += chunk;
     });
+    
+    response.on('end', () => {
+      if (response.statusCode === 200) {
+        res.status(200).json({ 
+          success: true, 
+          message: 'Заявка отправлена!' 
+        });
+      } else {
+        res.status(500).json({ 
+          error: 'Ошибка Telegram API',
+          details: data 
+        });
+      }
+    });
+  });
 
-    if (telegramResponse.ok) {
-      return res.status(200).json({ 
-        success: true, 
-        message: 'Заявка успешно отправлена в Telegram!' 
-      });
-    } else {
-      const error = await telegramResponse.text();
-      console.error('Telegram API Error:', error);
-      return res.status(500).json({ 
-        error: 'Ошибка отправки в Telegram',
-        details: error 
-      });
-    }
-
-  } catch (error) {
-    console.error('Server Error:', error);
-    return res.status(500).json({ 
-      error: 'Внутренняя ошибка сервера',
+  request.on('error', (error) => {
+    res.status(500).json({ 
+      error: 'Ошибка сети',
       details: error.message 
     });
-  }
-}
+  });
+
+  request.write(postData);
+  request.end();
+};
